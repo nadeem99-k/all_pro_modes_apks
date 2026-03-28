@@ -1,0 +1,17 @@
+{
+  "theme_color": "#eab308",
+  "background_color": "#0a0a0a",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "name": "VIP Mod APKs",
+  "short_name": "VIP Mods",
+  "description": "100% Guaranteed Premium Mod APKs for iOS and Android.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "256x256",
+      "type": "image/x-icon"
+    }
+  ]
+}

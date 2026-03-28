@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Shield, Upload, Users, Activity, Settings, Database, Trash2, Edit, Loader2, FileUp, Sparkles, CheckCircle, X, Globe, Smartphone, Clock, TrendingUp, Inbox, MessageSquare, AlertTriangle, Power } from "lucide-react";
+import { Shield, Upload, Users, Activity, Settings, Database, Trash2, Edit, Loader2, FileUp, Sparkles, CheckCircle, X, Globe, Smartphone, Clock, TrendingUp, Inbox, MessageSquare, AlertTriangle, Power, CreditCard, DollarSign, ThumbsUp, ThumbsDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [visitors, setVisitors] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [activityLog, setActivityLog] = useState<any[]>([]);
   const [siteSettings, setSiteSettings] = useState<any>({});
   const [stats, setStats] = useState({
@@ -42,8 +43,10 @@ export default function AdminDashboard() {
     todayVisitors: 0,
     weeklyGrowth: "+14.2%",
     openTickets: 0,
-    pendingRequests: 0
+    pendingRequests: 0,
+    pendingPayments: 0
   });
+  const [approvingTxn, setApprovingTxn] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
@@ -93,6 +96,10 @@ export default function AdminDashboard() {
       const { data: requestData } = await supabase.from("mod_requests").select("*").order("created_at", { ascending: false });
       if (requestData) setRequests(requestData);
 
+      // 4a. Fetch Transactions
+      const { data: txnData } = await supabase.from("transactions").select("*, apks(name)").order("created_at", { ascending: false });
+      if (txnData) setTransactions(txnData);
+
       // 4. Fetch System Activity Log
       const { data: activityData } = await supabase.from("system_activity").select("*").order("created_at", { ascending: false }).limit(6);
       if (activityData) setActivityLog(activityData);
@@ -138,7 +145,8 @@ export default function AdminDashboard() {
         todayVisitors: uniqueToday || 0,
         weeklyGrowth: "+14.2%",
         openTickets: ticketData?.filter(t => t.status === 'open').length || 0,
-        pendingRequests: requestData?.filter(r => r.status === 'pending').length || 0
+        pendingRequests: requestData?.filter(r => r.status === 'pending').length || 0,
+        pendingPayments: txnData?.filter((t: any) => t.status === 'pending').length || 0
       });
 
       setLoading(false);
@@ -198,6 +206,7 @@ export default function AdminDashboard() {
           size: `${sizeMB} MB`,
           description: detectedDesc,
           features: detectedFeatures,
+          price: 100,
         });
         setUploadStep(3);
       }, 1800);
@@ -245,6 +254,7 @@ export default function AdminDashboard() {
         install_steps: ["Download the APK", "Enable Install from Unknown Sources", "Install and enjoy!"],
         download_url: uploadResult.url,
         image_url: uploadResult.imageUrl || null,
+        price: parsedData.price || 0,
         status: 'working'
       });
 
@@ -295,14 +305,23 @@ export default function AdminDashboard() {
         {uploadModalOpen && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
           >
             <motion.div 
               initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-              className="bg-dark-900 border border-white/10 p-8 rounded-3xl w-full max-w-xl relative shadow-2xl overflow-hidden"
+              className="bg-dark-900 border border-white/10 rounded-3xl w-full max-w-xl relative shadow-2xl flex flex-col max-h-[90vh]"
             >
-              <button onClick={closeUploadModal} className="absolute top-6 right-6 text-gray-400 hover:text-white z-10"><X size={24} /></button>
-              
+              {/* Modal Header — always visible */}
+              <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b border-white/10 flex-shrink-0">
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest">
+                  {uploadStep === 1 ? "Select APK" : uploadStep === 2 ? "Analyzing..." : uploadStep === 3 ? "Confirm Details" : uploadStep === 4 ? "Uploading..." : "Done!"}
+                </p>
+                <button onClick={closeUploadModal} className="text-gray-400 hover:text-white"><X size={22} /></button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="overflow-y-auto flex-1 px-8 py-6">
+
               {uploadStep === 1 && (
                 <div className="text-center py-10">
                   <FileUp className="w-16 h-16 text-gold-500 mx-auto mb-6" />
@@ -330,7 +349,7 @@ export default function AdminDashboard() {
               )}
 
               {uploadStep === 3 && parsedData && (
-                <div>
+                <div className="pb-2">
                   <div className="flex items-center gap-3 mb-6 border-b border-white/10 pb-6">
                     <Sparkles className="w-8 h-8 text-gold-500" />
                     <div>
@@ -357,6 +376,21 @@ export default function AdminDashboard() {
                         <label className="text-xs text-gray-500 block mb-1">Detected Size</label>
                         <input type="text" value={parsedData.size} readOnly className="w-full bg-transparent font-bold text-white outline-none text-sm" />
                       </div>
+                    </div>
+                    <div className="bg-dark-800 p-3 rounded-xl border border-gold-500/20">
+                      <label className="text-xs text-gold-500 block mb-1 font-bold">💰 Individual Price (PKR)</label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gold-500 font-black">Rs</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={parsedData.price}
+                          onChange={e => setParsedData({...parsedData, price: parseInt(e.target.value) || 0})}
+                          className="w-full bg-transparent font-bold text-white outline-none text-sm"
+                          placeholder="e.g. 100"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Set to 0 to make this APK free for everyone.</p>
                     </div>
                     
                     <div className="bg-dark-800 p-4 rounded-xl border border-white/5 focus-within:border-gold-500/50 transition-colors mb-4 cursor-pointer hover:bg-white/5" onClick={() => imageInputRef.current?.click()}>
@@ -390,9 +424,17 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <button onClick={confirmUpload} className="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black rounded-xl font-black text-lg transition-all flex justify-center items-center gap-2">
-                    <Upload className="w-5 h-5" /> Push to Live Database
-                  </button>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => { setUploadStep(1); setSelectedFile(null); setParsedData(null); }}
+                      className="flex-1 py-4 glass hover:bg-white/10 text-gray-300 rounded-xl font-bold text-sm transition-all"
+                    >
+                      ← Back
+                    </button>
+                    <button onClick={confirmUpload} className="flex-[2] py-4 bg-gold-500 hover:bg-gold-400 text-black rounded-xl font-black text-base transition-all flex justify-center items-center gap-2">
+                      <Upload className="w-5 h-5" /> Push to Live Database
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -415,6 +457,8 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              </div>{/* end scrollable body */}
+
             </motion.div>
           </motion.div>
         )}
@@ -435,19 +479,23 @@ export default function AdminDashboard() {
         {[
           { id: "overview", name: "Overview", icon: <Activity className="w-5 h-5" /> },
           { id: "apks", name: "Manage Mods", icon: <Database className="w-5 h-5" /> },
+          { id: "transactions", name: "Payments", icon: <CreditCard className="w-5 h-5" />, badge: stats.pendingPayments },
           { id: "visitors", name: "Live Visitors", icon: <Globe className="w-5 h-5" /> },
           { id: "tickets", name: "Support Tokens", icon: <Inbox className="w-5 h-5" /> },
           { id: "requests", name: "Mod Requests", icon: <MessageSquare className="w-5 h-5" /> },
           { id: "users", name: "VIP Users", icon: <Users className="w-5 h-5" /> },
           { id: "settings", name: "Platform Config", icon: <Settings className="w-5 h-5" /> }
-        ].map(tab => (
+        ].map((tab: any) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`w-full flex items-center gap-3 px-6 py-4 rounded-2xl font-bold transition-all ${activeTab === tab.id ? "bg-gold-500 text-black shadow-[0_0_15px_rgba(234,179,8,0.3)]" : "glass text-gray-400 hover:text-white hover:bg-white/5"}`}
           >
             {tab.icon}
-            {tab.name}
+            <span className="flex-1 text-left">{tab.name}</span>
+            {tab.badge > 0 && (
+              <span className="bg-red-500 text-white text-xs font-black px-2 py-0.5 rounded-full">{tab.badge}</span>
+            )}
           </button>
         ))}
       </div>
@@ -578,6 +626,115 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+          </motion.div>
+        )}
+
+        {activeTab === "transactions" && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-black">Payment Transactions</h1>
+              <div className={`glass px-4 py-2 rounded-xl border text-sm font-bold flex items-center gap-2 ${stats.pendingPayments > 0 ? "border-red-500/30 text-red-400" : "border-white/5 text-gray-400"}`}>
+                <CreditCard className="w-4 h-4" />
+                {stats.pendingPayments} Pending
+              </div>
+            </div>
+
+            <div className="glass rounded-3xl overflow-hidden border border-white/5">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-white/5 border-b border-white/10">
+                    <tr>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">USER</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">TYPE</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">AMOUNT</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">TRX ID</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">STATUS</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {transactions.map(txn => (
+                      <tr key={txn.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-6 py-4 text-sm">
+                          <p className="font-bold text-gray-200">{txn.user_email}</p>
+                          <p className="text-xs text-gray-500">{new Date(txn.created_at).toLocaleDateString()}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className="px-2 py-1 rounded-lg bg-white/5 text-gray-300 font-mono text-xs">
+                            {txn.type === "single_apk" ? `🔓 ${txn.apks?.name || "APK"}` : txn.type === "bundle_starter" ? "🥉 Starter (10)" : txn.type === "bundle_pro" ? "🥈 Pro (50)" : "🥇 Elite (∞)"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-black text-gold-400">
+                          Rs {txn.amount?.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-mono text-gray-300">
+                          {txn.trx_id}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase border ${txn.status === "pending" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" : txn.status === "approved" ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
+                            {txn.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {txn.status === "pending" ? (
+                            <div className="flex gap-2">
+                              <button
+                                disabled={approvingTxn === txn.id}
+                                onClick={async () => {
+                                  setApprovingTxn(txn.id);
+                                  const res = await fetch("/api/payment/approve", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ transaction_id: txn.id, action: "approved" }),
+                                  });
+                                  if (res.ok) {
+                                    setTransactions(prev => prev.map(t => t.id === txn.id ? { ...t, status: "approved" } : t));
+                                    setStats(prev => ({ ...prev, pendingPayments: Math.max(0, prev.pendingPayments - 1) }));
+                                  }
+                                  setApprovingTxn(null);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 text-xs font-bold transition-all disabled:opacity-50"
+                              >
+                                {approvingTxn === txn.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ThumbsUp className="w-3 h-3" />}
+                                Approve
+                              </button>
+                              <button
+                                disabled={approvingTxn === txn.id}
+                                onClick={async () => {
+                                  setApprovingTxn(txn.id);
+                                  const res = await fetch("/api/payment/approve", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ transaction_id: txn.id, action: "rejected" }),
+                                  });
+                                  if (res.ok) {
+                                    setTransactions(prev => prev.map(t => t.id === txn.id ? { ...t, status: "rejected" } : t));
+                                    setStats(prev => ({ ...prev, pendingPayments: Math.max(0, prev.pendingPayments - 1) }));
+                                  }
+                                  setApprovingTxn(null);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold transition-all disabled:opacity-50"
+                              >
+                                <ThumbsDown className="w-3 h-3" /> Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-600 italic">Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {transactions.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500 italic">
+                          No transactions yet. Payments submitted by users will appear here.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         )}
 

@@ -94,10 +94,15 @@ export default function AppsCatalog() {
               </div>
 
               <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/5">
-                <span className="text-xs text-gray-500 font-medium">{app.size}</span>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 font-medium">{app.size}</span>
+                  <span className={`text-xs font-black mt-0.5 ${app.price > 0 ? "text-gold-500" : "text-green-400"}`}>
+                    {app.price > 0 ? `Rs ${app.price}` : "FREE"}
+                  </span>
+                </div>
                 <Link href={`/apps/${app.slug}`} className="glass hover:bg-gold-500 hover:text-black py-2.5 px-6 rounded-full text-sm font-bold transition-all flex items-center gap-2 hover:border-gold-400">
                   <Download className="w-4 h-4" />
-                  View & DL
+                  {app.price > 0 ? "View & Unlock" : "View & DL"}
                 </Link>
               </div>
             </motion.div>

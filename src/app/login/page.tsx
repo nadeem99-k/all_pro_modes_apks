@@ -33,10 +33,10 @@ export default function LoginPage() {
       if (signUpError) {
         setError(signUpError.message);
       } else {
-        router.push("/dashboard");
+        router.push("/apps");
       }
     } else {
-      router.push("/dashboard");
+      router.push("/apps");
     }
     setLoading(false);
   };

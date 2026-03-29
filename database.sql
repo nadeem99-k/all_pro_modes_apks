@@ -91,3 +91,36 @@ CREATE POLICY "Allow all for admin on settings" ON public.site_settings FOR ALL 
 
 -- 7. Add Image URL to APKs Table
 ALTER TABLE public.apks ADD COLUMN IF NOT EXISTS image_url text;
+
+-- 8. Transactions Table
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  user_id uuid REFERENCES auth.users(id),
+  user_email text,
+  type text, -- 'single_apk', 'bundle_starter', etc.
+  amount numeric,
+  trx_id text,
+  apk_id uuid REFERENCES public.apks(id),
+  credits_to_add integer DEFAULT 0,
+  status text DEFAULT 'pending',
+  screenshot_url text
+);
+
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can see their own transactions" ON public.transactions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own transactions" ON public.transactions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admin can see all transactions" ON public.transactions FOR ALL USING (true);
+
+-- 9. Unlocked APKs Table
+CREATE TABLE IF NOT EXISTS public.unlocked_apks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  user_id uuid REFERENCES auth.users(id),
+  apk_id uuid REFERENCES public.apks(id),
+  UNIQUE(user_id, apk_id)
+);
+
+ALTER TABLE public.unlocked_apks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can see their own unlocked apks" ON public.unlocked_apks FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admin can manage all unlocked apks" ON public.unlocked_apks FOR ALL USING (true);

@@ -4,7 +4,19 @@ import { motion } from "framer-motion";
 import { Shield, Smartphone, Zap, Download } from "lucide-react";
 import Link from "next/link";
 
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
 export default function Home() {
+  const [session, setSession] = useState<any>(null);
+  const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+  }, [supabase.auth]);
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* Background glowing effects */}
@@ -29,7 +41,7 @@ export default function Home() {
             Get instant access to top-tier modified applications. Netflix, CapCut, Spotify, and more. Guaranteed updates, no ads, endless features.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/apps" className="w-full sm:w-auto px-8 py-4 bg-gold-500 text-black rounded-full font-black text-lg hover:bg-gold-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+            <Link href={session ? "/apps" : "/login"} className="w-full sm:w-auto px-8 py-4 bg-gold-500 text-black rounded-full font-black text-lg hover:bg-gold-400 transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
               <Download className="w-5 h-5" />
               Browse Mods
             </Link>

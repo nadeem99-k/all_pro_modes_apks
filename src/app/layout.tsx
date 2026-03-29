@@ -5,6 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { VisitorTracker } from "@/components/VisitorTracker";
 import { MaintenanceCheck } from "@/components/MaintenanceCheck";
+import { WhatsAppFloat } from "@/components/WhatsAppFloat";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -47,6 +48,7 @@ export default function RootLayout({
             {children}
           </main>
           <Footer />
+          <WhatsAppFloat />
         </MaintenanceCheck>
       </body>
     </html>

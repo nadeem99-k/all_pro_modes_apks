@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle, Zap, Crown, X, Copy, Loader2, Shield, Star } from "lucide-react";
+import { CheckCircle, Zap, Crown, X, Copy, Loader2, Shield, Star, Upload } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const EASYPAISA_NUMBER = "03XX-XXXXXXX"; // Replace with your real number
-const JAZZCASH_NUMBER = "03XX-XXXXXXX";  // Replace with your real number
+const EASYPAISA_NUMBER = "03400324526"; 
+const JAZZCASH_NUMBER = "03139183850";
+const EASYPAISA_NAME = "Waseemali";
+const JAZZCASH_NAME = "HAMEER ALI KALHORO";
 
 const bundles = [
   {
@@ -79,6 +81,7 @@ export default function PricingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const [copiedNum, setCopiedNum] = useState("");
+  const [screenshot, setScreenshot] = useState<File | null>(null);
 
   const copyNumber = (num: string, label: string) => {
     navigator.clipboard.writeText(num.replace(/-/g, ""));
@@ -100,16 +103,39 @@ export default function PricingPage() {
       setSubmitting(false);
       return;
     }
-    const res = await fetch("/api/payment/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trx_id: trxId.trim(), amount: selectedBundle!.price, type: selectedBundle!.id }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Something went wrong. Please try again.");
-    } else {
-      setSubmitted(true);
+
+    try {
+      let screenshotUrl = null;
+      if (screenshot) {
+        const formData = new FormData();
+        formData.append("file", screenshot);
+        const uploadRes = await fetch("/api/payment/upload-screenshot", {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) throw new Error(uploadData.error);
+        screenshotUrl = uploadData.url;
+      }
+
+      const res = await fetch("/api/payment/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          trx_id: trxId.trim(), 
+          amount: selectedBundle!.price, 
+          type: selectedBundle!.id,
+          screenshot_url: screenshotUrl
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Something went wrong. Please try again.");
+      } else {
+        setSubmitted(true);
+      }
+    } catch (err: any) {
+      setError(err.message);
     }
     setSubmitting(false);
   };
@@ -120,7 +146,19 @@ export default function PricingPage() {
     setError("");
     setSubmitted(false);
     setSubmitting(false);
+    setScreenshot(null);
   };
+
+  useEffect(() => {
+    if (selectedBundle) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [selectedBundle]);
 
   return (
     <div className="min-h-screen pt-32 pb-20 px-6 max-w-7xl mx-auto relative z-10">
@@ -269,13 +307,14 @@ export default function PricingPage() {
                     <div className="space-y-3 mb-5">
                       <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Send Payment To</p>
                       {[
-                        { label: "EasyPaisa", number: EASYPAISA_NUMBER, color: "text-green-400" },
-                        { label: "JazzCash",  number: JAZZCASH_NUMBER,  color: "text-red-400" },
-                      ].map(({ label, number, color }) => (
+                        { label: "EasyPaisa", number: EASYPAISA_NUMBER, name: EASYPAISA_NAME, color: "text-green-400" },
+                        { label: "JazzCash",  number: JAZZCASH_NUMBER,  name: JAZZCASH_NAME,  color: "text-red-400" },
+                      ].map(({ label, number, name, color }) => (
                         <div key={label} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
                           <div>
-                            <p className={`font-black text-sm ${color}`}>{label}</p>
+                            <p className={`font-black text-[10px] uppercase tracking-widest mb-1 ${color}`}>{label}</p>
                             <p className="text-white font-mono font-bold text-lg">{number}</p>
+                            <p className="text-[10px] text-gray-500 font-bold">{name}</p>
                           </div>
                           <button onClick={() => copyNumber(number, label)} className="p-2 glass hover:bg-white/10 rounded-xl transition-all">
                             {copiedNum === label ? <CheckCircle className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5 text-gray-400" />}
@@ -293,7 +332,7 @@ export default function PricingPage() {
                     {/* TRX ID */}
                     <div className="mb-4">
                       <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">
-                        Paste Your Transaction ID (TRX ID)
+                        Transaction ID (TRX ID)
                       </label>
                       <input
                         type="text"
@@ -302,20 +341,45 @@ export default function PricingPage() {
                         placeholder="e.g. EP24082300123456"
                         className="w-full bg-white/5 border border-white/10 focus:border-gold-500/50 rounded-xl px-4 py-3 text-white font-mono outline-none transition-all"
                       />
+                    </div>
+
+                    {/* Screenshot Upload */}
+                    <div className="mb-6">
+                      <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-2">
+                        Proof of Payment (Screenshot)
+                      </label>
+                      <label className="flex flex-col items-center justify-center w-full h-24 bg-white/5 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:bg-white/10 hover:border-gold-500/30 transition-all">
+                        <div className="flex flex-col items-center justify-center">
+                          <p className="text-xs text-gray-400 font-bold">{screenshot ? screenshot.name : "Click to upload screenshot"}</p>
+                        </div>
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*"
+                          onChange={(e) => setScreenshot(e.target.files?.[0] || null)}
+                        />
+                      </label>
                       {error && <p className="text-red-400 text-xs mt-2 font-bold">{error}</p>}
                     </div>
 
                     <button
                       onClick={handleSubmit}
-                      disabled={submitting}
-                      className="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black rounded-2xl font-black text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      disabled={submitting || !trxId || !screenshot}
+                      className="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black rounded-2xl font-black text-base transition-all flex items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
                     >
-                      {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                      {submitting ? "Submitting..." : "I've Paid — Submit TRX ID"}
+                      {submitting ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        !trxId || !screenshot ? "Complete Fields Above" : "I've Paid — Submit Proof"
+                      )}
                     </button>
 
-                    <p className="text-center text-xs text-gray-500 mt-4">
-                      After submission, admin verifies and approves. Credits appear within minutes.
+                    <p className="text-center text-xs text-gray-500 mt-4 leading-relaxed">
+                      After submission, admin verifies and approves. Credits appear within minutes.<br/>
+                      <span className="text-[10px] text-gray-500 flex items-center justify-center gap-1 mt-1 font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        Help? WhatsApp Support: <span className="text-white">+92 341 0720377</span>
+                      </span>
                     </p>
                   </>
                 )}

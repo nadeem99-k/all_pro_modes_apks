@@ -58,6 +58,7 @@ export default function AdminDashboard() {
   const [parsedData, setParsedData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -648,6 +649,7 @@ export default function AdminDashboard() {
                       <th className="px-6 py-4 text-sm font-black text-gold-500">TYPE</th>
                       <th className="px-6 py-4 text-sm font-black text-gold-500">AMOUNT</th>
                       <th className="px-6 py-4 text-sm font-black text-gold-500">TRX ID</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500">SCREENSHOT</th>
                       <th className="px-6 py-4 text-sm font-black text-gold-500">STATUS</th>
                       <th className="px-6 py-4 text-sm font-black text-gold-500">ACTIONS</th>
                     </tr>
@@ -669,6 +671,18 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-6 py-4 text-sm font-mono text-gray-300">
                           {txn.trx_id}
+                        </td>
+                        <td className="px-6 py-4">
+                          {txn.screenshot_url ? (
+                            <button 
+                              onClick={() => setSelectedScreenshot(txn.screenshot_url)}
+                              className="text-gold-500 hover:text-white text-xs font-bold underline flex items-center gap-1"
+                            >
+                              <FileUp className="w-3 h-3" /> View
+                            </button>
+                          ) : (
+                            <span className="text-gray-600 text-[10px]">No Proof</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase border ${txn.status === "pending" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" : txn.status === "approved" ? "bg-green-500/10 text-green-400 border-green-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
@@ -941,6 +955,32 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* Screenshot Viewer Modal */}
+      <AnimatePresence>
+        {selectedScreenshot && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 md:p-12"
+          >
+            <button 
+              onClick={() => setSelectedScreenshot(null)}
+              className="absolute top-8 right-8 text-white/50 hover:text-white z-10 p-2 hover:bg-white/10 rounded-full transition-all"
+            >
+              <X size={32} />
+            </button>
+            <motion.div 
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="relative w-full h-full flex items-center justify-center"
+            >
+              <img 
+                src={selectedScreenshot} 
+                alt="Payment Proof" 
+                className="max-w-full max-h-full object-contain rounded-xl shadow-2xl border border-white/10" 
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

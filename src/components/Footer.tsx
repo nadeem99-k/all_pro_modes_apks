@@ -1,7 +1,20 @@
+"use client";
+
 import Link from 'next/link';
 import { Shield, Mail, Webhook } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export function Footer() {
+  const [session, setSession] = useState<any>(null);
+  const supabase = createClient();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+  }, [supabase.auth]);
+
   return (
     <footer className="border-t border-white/5 bg-black/50 backdrop-blur-md pt-16 pb-8 px-6 mt-auto">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
@@ -24,7 +37,7 @@ export function Footer() {
           <h4 className="font-bold text-white mb-6">Navigation</h4>
           <ul className="space-y-4 text-gray-400 text-sm font-medium">
             <li><Link href="/" className="hover:text-gold-500 transition-colors">Home</Link></li>
-            <li><Link href="/apps" className="hover:text-gold-500 transition-colors">VIP Catalog</Link></li>
+            <li><Link href={session ? "/apps" : "/login"} className="hover:text-gold-500 transition-colors">VIP Catalog</Link></li>
             <li><Link href="/pricing" className="hover:text-gold-500 transition-colors">Pricing & Tiers</Link></li>
           </ul>
         </div>

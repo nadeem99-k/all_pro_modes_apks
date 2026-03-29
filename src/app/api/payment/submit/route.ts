@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { trx_id, amount, type, apk_id } = body;
+  const { trx_id, amount, type, apk_id, screenshot_url } = body;
 
   if (!trx_id || !amount || !type) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
     apk_id: apk_id || null,
     credits_to_add: creditsMap[type] ?? 0,
     status: "pending",
+    screenshot_url: screenshot_url || null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

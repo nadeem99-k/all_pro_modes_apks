@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { isAdmin } from '@/lib/admin';
 
 export async function GET() {
   try {
     const supabase = await createClient();
+    
+    // Security Check
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!isAdmin(user?.email)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { data, error } = await supabase
       .from('site_settings')
       .select('*');
@@ -25,10 +33,10 @@ export async function POST(req: Request) {
   try {
     const supabase = await createClient();
     
-    // Check if user is admin (simplified for now)
+    // Security Check
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      // return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!isAdmin(user?.email)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { id, value } = await req.json();

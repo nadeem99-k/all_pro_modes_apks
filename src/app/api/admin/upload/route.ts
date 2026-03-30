@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { isAdmin } from '@/lib/admin';
 
 // Use service role key to bypass RLS for admin uploads
 const supabaseAdmin = createClient(
@@ -9,6 +12,18 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+    );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!isAdmin(user?.email)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const data = await req.formData();
     const file: File | null = data.get('file') as unknown as File;
     const image: File | null = data.get('image') as unknown as File;

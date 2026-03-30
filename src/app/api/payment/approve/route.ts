@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { isAdmin } from "@/lib/admin";
 
 export async function POST(req: Request) {
   const cookieStore = await cookies();
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
   );
 
   const { data: { user } } = await supabaseAnon.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(user?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // 2. Service Role client to bypass RLS for administrative updates
   const supabaseAdmin = createClient(

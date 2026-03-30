@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { isAdmin } from "@/lib/admin";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
@@ -12,7 +13,7 @@ export async function GET() {
   );
 
   const { data: { user } } = await supabaseAnon.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(user?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabaseAdmin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   );
 
   const { data: { user: adminUser } } = await supabaseAnon.auth.getUser();
-  if (!adminUser) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isAdmin(adminUser?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id, credits, plan, display_name } = await req.json();
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Shield, Upload, Users, Activity, Settings, Database, Trash2, Edit, Loader2, FileUp, Sparkles, CheckCircle, X, Globe, Smartphone, Clock, TrendingUp, Inbox, MessageSquare, AlertTriangle, Power, CreditCard, DollarSign, ThumbsUp, ThumbsDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
+import { notFound } from "next/navigation";
 
 function parseUserAgent(ua: string) {
   if (!ua) return "Unknown Device";
@@ -61,8 +62,29 @@ export default function AdminDashboard() {
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
   useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || user.email !== process.env.NEXT_PUBLIC_ADMIN_EMAIL) {
+          return notFound();
+        }
+        setIsAuthorized(true);
+      } catch (err) {
+        return notFound();
+      } finally {
+        setCheckingAuth(false);
+      }
+    }
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthorized) return;
+
     async function fetchData() {
       setLoading(true);
       
@@ -163,7 +185,7 @@ export default function AdminDashboard() {
     fetchData();
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAuthorized]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -332,6 +354,14 @@ export default function AdminDashboard() {
       alert("Failed to save user");
     }
   };
+
+  if (checkingAuth || !isAuthorized) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-gold-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-20 px-6 max-w-7xl mx-auto flex flex-col md:flex-row gap-8 relative z-10">

@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+// Use service role key to bypass RLS for admin/system uploads
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 export async function POST(req: Request) {
   try {
@@ -12,26 +17,34 @@ export async function POST(req: Request) {
     }
 
     const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+    
+    // Upload screenshot to 'screenshots' bucket
+    const { data: uploadData, error: uploadError } = await supabaseAdmin
+      .storage
+      .from('screenshots')
+      .upload(fileName, bytes, {
+        contentType: file.type,
+        upsert: true
+      });
 
-    // Create public/uploads/screenshots directory
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'screenshots');
-    try { 
-      await mkdir(uploadDir, { recursive: true }); 
-    } catch (e) {}
+    if (uploadError) throw uploadError;
 
-    // Save the screenshot locally
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
+    // Get public URL
+    const { data: { publicUrl } } = supabaseAdmin
+      .storage
+      .from('screenshots')
+      .getPublicUrl(fileName);
 
-    // Provide the absolute local route back
     return NextResponse.json({ 
       success: true, 
-      url: `/uploads/screenshots/${encodeURIComponent(fileName)}`
+      url: publicUrl
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Screenshot Upload error:", error);
-    return NextResponse.json({ success: false, error: 'Upload structurally failed.' }, { status: 500 });
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Upload failed.' 
+    }, { status: 500 });
   }
 }

@@ -59,6 +59,8 @@ export default function AdminDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [editingUser, setEditingUser] = useState<any>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -105,10 +107,16 @@ export default function AdminDashboard() {
       const { data: activityData } = await supabase.from("system_activity").select("*").order("created_at", { ascending: false }).limit(6);
       if (activityData) setActivityLog(activityData);
 
-      // 5. Fetch Site Settings
-      const setRes = await fetch('/api/admin/settings');
+      // 5. Fetch Site Settings & Profiles
+      const [setRes, profRes] = await Promise.all([
+        fetch('/api/admin/settings'),
+        fetch('/api/admin/users')
+      ]);
       const settings = await setRes.json();
       setSiteSettings(settings);
+      
+      const profs = await profRes.json();
+      if (Array.isArray(profs)) setProfiles(profs);
 
       // 5. Calculate Stats
       const now = new Date();
@@ -293,8 +301,35 @@ export default function AdminDashboard() {
     const { error } = await supabase.from('apks').delete().eq('id', id);
     if (!error) {
       setApps(prev => prev.filter(app => app.id !== id));
+      // Log to system activity
+      await supabase.from('system_activity').insert({
+        action: 'APK Deleted',
+        target: `${name}`,
+        type: 'settings'
+      });
     } else {
       alert("Error deleting app: " + error.message);
+    }
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingUser),
+      });
+      if (res.ok) {
+        setProfiles(prev => prev.map(p => p.id === editingUser.id ? editingUser : p));
+        setEditingUser(null);
+      } else {
+        const data = await res.json();
+        alert("Error: " + data.error);
+      }
+    } catch (err) {
+      alert("Failed to save user");
     }
   };
 
@@ -818,15 +853,66 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === "users" && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <h1 className="text-3xl font-black mb-6">VIP Subscribers</h1>
-            <div className="glass p-8 rounded-3xl text-center text-gray-400 border border-white/5">
-              <Users className="w-12 h-12 text-gold-500 mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-bold text-white mb-2">Automated VIP Syncing</h3>
-              <p className="max-w-md mx-auto mb-6">Managing 1,420 lifetime members. New subscriptions from EasyPaisa/JazzCash appear here instantly after validation.</p>
-              <button className="bg-gold-500/10 hover:bg-gold-500/20 text-gold-500 border border-gold-500/30 px-6 py-2 rounded-xl font-bold transition-all">
-                 Refresh Auth Table
-              </button>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-3xl font-black">VIP Members</h1>
+              <div className="text-xs font-bold text-gray-500 bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                Total Members: {profiles.length}
+              </div>
+            </div>
+            
+            <div className="glass rounded-3xl overflow-hidden border border-white/5">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-white/5 border-b border-white/10">
+                    <tr>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500 uppercase tracking-widest">User</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500 uppercase tracking-widest text-center">Plan</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500 uppercase tracking-widest text-center">Credits</th>
+                      <th className="px-6 py-4 text-sm font-black text-gold-500 uppercase tracking-widest text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {profiles.map((profile) => (
+                      <tr key={profile.id} className="hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-bold text-white">{profile.display_name || "New Member"}</span>
+                            <span className="text-xs text-gray-500">{profile.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border ${
+                            profile.plan === 'elite' ? 'bg-gold-500/10 text-gold-500 border-gold-500/30' : 
+                            profile.plan === 'pro' ? 'bg-blue-500/10 text-blue-500 border-blue-500/30' :
+                            'bg-gray-500/10 text-gray-500 border-white/5'
+                          }`}>
+                            {profile.plan}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-lg font-black text-white">{profile.credits}</span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => setEditingUser(profile)}
+                            className="p-2 bg-white/5 hover:bg-gold-500 hover:text-black rounded-lg transition-all"
+                          >
+                            <Edit size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {profiles.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500 italic">
+                          No VIP members found yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </motion.div>
         )}
@@ -954,6 +1040,82 @@ export default function AdminDashboard() {
           </motion.div>
         )}
       </div>
+
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {editingUser && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+              className="bg-dark-900 border border-gold-500/30 rounded-3xl w-full max-w-md p-8 shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setEditingUser(null)} 
+                className="absolute top-6 right-6 text-gray-400 hover:text-white"
+              >
+                <X size={22} />
+              </button>
+              
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-3 bg-gold-500/10 rounded-2xl text-gold-500">
+                  <Users size={24} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black">Edit VIP Access</h2>
+                  <p className="text-xs text-gray-500">{editingUser.email}</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveUser} className="space-y-6">
+                <div>
+                  <label className="text-xs font-black text-gold-500 uppercase tracking-widest block mb-2">Display Name</label>
+                  <input 
+                    type="text" 
+                    value={editingUser.display_name || ""} 
+                    onChange={e => setEditingUser({...editingUser, display_name: e.target.value})}
+                    className="w-full bg-dark-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-gold-500 outline-none" 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-black text-gold-500 uppercase tracking-widest block mb-2">Credits</label>
+                    <input 
+                      type="number" 
+                      value={editingUser.credits} 
+                      onChange={e => setEditingUser({...editingUser, credits: parseInt(e.target.value) || 0})}
+                      className="w-full bg-dark-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-gold-500 outline-none font-black text-lg" 
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-black text-gold-500 uppercase tracking-widest block mb-2">Plan Status</label>
+                    <select 
+                      value={editingUser.plan} 
+                      onChange={e => setEditingUser({...editingUser, plan: e.target.value})}
+                      className="w-full bg-dark-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-gold-500 outline-none font-bold"
+                    >
+                      <option value="free">Free</option>
+                      <option value="starter">Starter</option>
+                      <option value="pro">Pro</option>
+                      <option value="elite">Elite</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="w-full py-4 bg-gold-500 hover:bg-gold-400 text-black rounded-2xl font-black transition-all shadow-lg"
+                >
+                  Save Access Changes
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Screenshot Viewer Modal */}
       <AnimatePresence>

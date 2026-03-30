@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+// Use service role key to bypass RLS for admin uploads
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+);
 
 export async function POST(req: Request) {
   try {
@@ -12,36 +17,61 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No file provided" });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // 1. Upload APK to 'apks' bucket
+    const fileBytes = await file.arrayBuffer();
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+    
+    const { data: fileData, error: fileError } = await supabaseAdmin
+      .storage
+      .from('apks')
+      .upload(fileName, fileBytes, {
+        contentType: file.type || 'application/vnd.android.package-archive',
+        upsert: true
+      });
 
-    // Create public/uploads directory if it doesn't automatically exist
-    const uploadDir = join(process.cwd(), 'public', 'uploads');
-    try { 
-      await mkdir(uploadDir, { recursive: true }); 
-    } catch (e) {}
+    if (fileError) throw fileError;
 
-    // Save the literal exact APK file locally so we can serve it perfectly
-    const filePath = join(uploadDir, file.name);
-    await writeFile(filePath, buffer);
+    // Get public URL for the APK
+    const { data: { publicUrl: downloadUrl } } = supabaseAdmin
+      .storage
+      .from('apks')
+      .getPublicUrl(fileName);
 
     let imageUrl = null;
     if (image) {
+      // 2. Upload Image to 'icons' bucket
       const imageBytes = await image.arrayBuffer();
-      const imageBuffer = Buffer.from(imageBytes);
-      const imagePath = join(uploadDir, image.name);
-      await writeFile(imagePath, imageBuffer);
-      imageUrl = `/uploads/${encodeURIComponent(image.name)}`;
+      const imageName = `${Date.now()}-${image.name.replace(/\s+/g, '_')}`;
+      
+      const { data: imageData, error: imageError } = await supabaseAdmin
+        .storage
+        .from('icons')
+        .upload(imageName, imageBytes, {
+          contentType: image.type,
+          upsert: true
+        });
+
+      if (imageError) throw imageError;
+
+      // Get public URL for the icon
+      const { data: { publicUrl: iconUrl } } = supabaseAdmin
+        .storage
+        .from('icons')
+        .getPublicUrl(imageName);
+      
+      imageUrl = iconUrl;
     }
 
-    // Provide the absolute local route back to Supabase
     return NextResponse.json({ 
       success: true, 
-      url: `/uploads/${encodeURIComponent(file.name)}`,
+      url: downloadUrl,
       imageUrl: imageUrl
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Upload error:", error);
-    return NextResponse.json({ success: false, error: 'Upload structurally failed.' }, { status: 500 });
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Upload failed.' 
+    }, { status: 500 });
   }
 }

@@ -90,7 +90,7 @@ async function deleteExistingAsset(releaseId: number, fileName: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Verify admin
+    // 1. Verify admin (Strict protection — only the admin can get the token)
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -109,15 +109,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse form data
-    const form = await req.formData();
-    const file = form.get('file') as File | null;
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    // 2. Parse request JSON (fileName) instead of binary FormData
+    const body = await req.json();
+    if (!body?.fileName) {
+      return NextResponse.json({ error: 'No fileName provided' }, { status: 400 });
     }
 
     // Safe filename: timestamp + cleaned name
-    const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const safeName = `${Date.now()}-${body.fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
     // 3. Get or create the storage release
     const releaseId = await getOrCreateRelease();
@@ -125,36 +124,16 @@ export async function POST(req: NextRequest) {
     // 4. Remove any existing asset with the same name (upsert behaviour)
     await deleteExistingAsset(releaseId, safeName);
 
-    // 5. Upload asset to GitHub Releases (supports up to 2GB!)
-    const fileBuffer = await file.arrayBuffer();
+    // 5. Return secure upload credentials back to the client
+    // The client will upload directly to GitHub bypassing Vercel's 4.5MB limit!
+    const uploadUrl = `https://uploads.github.com/repos/${GITHUB_REPO}/releases/${releaseId}/assets?name=${encodeURIComponent(safeName)}`;
 
-    const uploadRes = await fetch(
-      `https://uploads.github.com/repos/${GITHUB_REPO}/releases/${releaseId}/assets?name=${encodeURIComponent(safeName)}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${GITHUB_TOKEN}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'Content-Type': file.type || 'application/octet-stream',
-          'Content-Length': String(fileBuffer.byteLength),
-          'User-Agent': 'VipMods-Uploader',
-        },
-        body: fileBuffer,
-      }
-    );
-
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json().catch(() => ({ message: uploadRes.statusText }));
-      throw new Error(`GitHub upload failed: ${err.message || uploadRes.status}`);
-    }
-
-    const asset = await uploadRes.json();
-
-    // GitHub release assets have a browser_download_url that is always public
-    return NextResponse.json({ url: asset.browser_download_url });
+    return NextResponse.json({ 
+      uploadUrl,
+      token: GITHUB_TOKEN,
+    });
   } catch (err: any) {
-    console.error('GitHub upload error:', err);
-    return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
+    console.error('GitHub auth route error:', err);
+    return NextResponse.json({ error: err.message || 'Upload setup failed' }, { status: 500 });
   }
 }

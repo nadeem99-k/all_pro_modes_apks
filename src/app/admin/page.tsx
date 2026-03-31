@@ -268,22 +268,69 @@ export default function AdminDashboard() {
         setUploadProgress(fakeProgress);
       }, 400);
 
-      const apkForm = new FormData();
-      apkForm.append('file', selectedFile);
+      let downloadUrl = '';
 
-      // Large files → GitHub Releases (up to 2 GB, free)
-      // Small files → Supabase Storage (fast, CDN-backed)
-      const apkEndpoint = isLargeFile ? '/api/admin/upload-github' : '/api/admin/upload';
-      if (!isLargeFile) apkForm.append('bucket', 'apks');
+      if (isLargeFile) {
+        // Step 1A: Large File — Get secure upload URL and token from our server
+        const initRes = await fetch('/api/admin/upload-github', {
+          method: 'POST',
+          body: JSON.stringify({ fileName: selectedFile.name }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const initJson = await initRes.json();
+        
+        if (!initRes.ok || !initJson.uploadUrl) {
+           clearInterval(progressTimer);
+           throw new Error(initJson.error || 'Failed to initialize GitHub upload');
+        }
 
-      const apkRes = await fetch(apkEndpoint, { method: 'POST', body: apkForm });
-      const apkJson = await apkRes.json();
+        // Step 1B: Upload directly from the browser to GitHub bypassing Vercel!
+        clearInterval(progressTimer); // Stop fake progress, use real progress
+        
+        downloadUrl = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', initJson.uploadUrl, true);
+          xhr.setRequestHeader('Authorization', `Bearer ${initJson.token}`);
+          xhr.setRequestHeader('Accept', 'application/vnd.github+json');
+          xhr.setRequestHeader('X-GitHub-Api-Version', '2022-11-28');
+          xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
+          
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = Math.round((event.loaded / event.total) * 80);
+              setUploadProgress(percentComplete); // Real accurate progress!
+            }
+          };
+          
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              const asset = JSON.parse(xhr.responseText);
+              resolve(asset.browser_download_url);
+            } else {
+              reject(new Error(`GitHub upload failed: ${xhr.statusText}`));
+            }
+          };
+          
+          xhr.onerror = () => reject(new Error('Network error during GitHub upload'));
+          xhr.send(selectedFile); // Direct browser-to-GitHub transfer
+        });
+        
+      } else {
+        // Small file handler — via our fast proxy server to Supabase
+        const apkForm = new FormData();
+        apkForm.append('file', selectedFile);
+        apkForm.append('bucket', 'apks');
 
-      if (!apkRes.ok || !apkJson.url) {
-        clearInterval(progressTimer);
-        throw new Error(apkJson.error || 'APK upload failed');
+        const apkRes = await fetch('/api/admin/upload', { method: 'POST', body: apkForm });
+        const apkJson = await apkRes.json();
+
+        if (!apkRes.ok || !apkJson.url) {
+          clearInterval(progressTimer);
+          throw new Error(apkJson.error || 'APK upload failed');
+        }
+        downloadUrl = apkJson.url;
       }
-      const downloadUrl: string = apkJson.url;
+      
       setUploadProgress(80);
 
       // ── Step 2: Upload icon/image (always Supabase — images are small) ──

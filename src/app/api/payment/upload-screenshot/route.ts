@@ -19,6 +19,18 @@ export async function POST(req: Request) {
     const bytes = await file.arrayBuffer();
     const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
     
+    // Auto-create 'screenshots' bucket if it doesn't exist
+    const { data: buckets } = await supabaseAdmin.storage.listBuckets();
+    const bucketExists = buckets?.some(b => b.name === 'screenshots');
+    
+    if (!bucketExists) {
+      const { error: createError } = await supabaseAdmin.storage.createBucket('screenshots', { 
+        public: true,
+        fileSizeLimit: 5242880 // 5MB
+      });
+      if (createError) console.error("Failed to auto-create bucket:", createError);
+    }
+
     // Upload screenshot to 'screenshots' bucket
     const { data: uploadData, error: uploadError } = await supabaseAdmin
       .storage

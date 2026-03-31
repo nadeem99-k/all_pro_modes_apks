@@ -7,9 +7,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-export default function AppDetailsPage(props: { params: Promise<{ id: string }> }) {
+export default function AppDetailsPage(props: { params: Promise<{ slug: string }> }) {
   const params = use(props.params);
-  const slug = params.id; // Using slug as id from the directory param
+  const slug = params.slug; // Using slug from the directory param
   const [app, setApp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isUnlocked, setIsUnlocked] = useState(false);

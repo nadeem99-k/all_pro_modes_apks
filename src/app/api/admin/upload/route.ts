@@ -50,6 +50,18 @@ export async function POST(req: NextRequest) {
     const service = getServiceClient();
     const fileBuffer = await file.arrayBuffer();
 
+    // Auto-create bucket if it doesn't exist
+    const { data: buckets } = await service.storage.listBuckets();
+    const bucketExists = buckets?.some(b => b.name === bucket);
+    
+    if (!bucketExists) {
+      const { error: createError } = await service.storage.createBucket(bucket, { 
+        public: true,
+        fileSizeLimit: 52428800 // 50MB Supabase Limit
+      });
+      if (createError) console.error(`Failed to auto-create bucket ${bucket}:`, createError);
+    }
+
     const { error } = await service.storage
       .from(bucket)
       .upload(path, fileBuffer, {

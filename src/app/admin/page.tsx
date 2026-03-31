@@ -246,77 +246,38 @@ export default function AdminDashboard() {
     }
   };
 
+  const [externalApkUrl, setExternalApkUrl] = useState('');
+
   const confirmUpload = async () => {
     setUploadStep(4);
     setUploadProgress(0);
     
-    if (!selectedFile) {
+    if (!selectedFile && !externalApkUrl) {
       alert("No file selected.");
       setUploadStep(1);
       return;
     }
 
     try {
-      // ── Step 1: Smart upload — GitHub Releases for large APKs, Supabase for small ones ──
+      // ── Step 1: Secure Upload OR Direct Link Fallback ──
       const FIFTY_MB = 50 * 1024 * 1024;
-      const isLargeFile = selectedFile.size > FIFTY_MB;
+      const isLargeFile = selectedFile && selectedFile.size > FIFTY_MB;
+      let downloadUrl = externalApkUrl;
 
-      // Smooth fake progress (fetch has no real upload progress)
+      // Smooth fake progress
       let fakeProgress = 0;
       const progressTimer = setInterval(() => {
-        fakeProgress = Math.min(fakeProgress + (isLargeFile ? 1 : 3), 75);
+        fakeProgress = Math.min(fakeProgress + 3, 75);
         setUploadProgress(fakeProgress);
       }, 400);
 
-      let downloadUrl = '';
-
-      if (isLargeFile) {
-        // Step 1A: Large File — Get secure upload URL and token from our server
-        const initRes = await fetch('/api/admin/upload-github', {
-          method: 'POST',
-          body: JSON.stringify({ fileName: selectedFile.name }),
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const initJson = await initRes.json();
-        
-        if (!initRes.ok || !initJson.uploadUrl) {
-           clearInterval(progressTimer);
-           throw new Error(initJson.error || 'Failed to initialize GitHub upload');
+      // If no external URL is provided, try uploading to Supabase
+      if (!downloadUrl && selectedFile) {
+        if (isLargeFile) {
+          clearInterval(progressTimer);
+          throw new Error("This file exceeds the 50MB Supabase Free-Tier limit & Vercel's 4.5MB limits. Please upload the APK manually to Google Drive or MediaFire, and paste the direct link in the 'External APK Link' box below.");
         }
 
-        // Step 1B: Upload directly from the browser to GitHub bypassing Vercel!
-        clearInterval(progressTimer); // Stop fake progress, use real progress
-        
-        downloadUrl = await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', initJson.uploadUrl, true);
-          xhr.setRequestHeader('Authorization', `Bearer ${initJson.token}`);
-          xhr.setRequestHeader('Accept', 'application/vnd.github+json');
-          xhr.setRequestHeader('X-GitHub-Api-Version', '2022-11-28');
-          xhr.setRequestHeader('Content-Type', selectedFile.type || 'application/octet-stream');
-          
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const percentComplete = Math.round((event.loaded / event.total) * 80);
-              setUploadProgress(percentComplete); // Real accurate progress!
-            }
-          };
-          
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              const asset = JSON.parse(xhr.responseText);
-              resolve(asset.browser_download_url);
-            } else {
-              reject(new Error(`GitHub upload failed: ${xhr.statusText}`));
-            }
-          };
-          
-          xhr.onerror = () => reject(new Error('Network error during GitHub upload'));
-          xhr.send(selectedFile); // Direct browser-to-GitHub transfer
-        });
-        
-      } else {
-        // Small file handler — via our fast proxy server to Supabase
         const apkForm = new FormData();
         apkForm.append('file', selectedFile);
         apkForm.append('bucket', 'apks');
@@ -540,6 +501,20 @@ export default function AdminDashboard() {
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-1">Set to 0 to make this APK free for everyone.</p>
+                    </div>
+
+                    <div className="bg-dark-800 p-4 rounded-xl border border-blue-500/30">
+                      <label className="text-xs text-blue-500 block mb-1 font-bold">🔗 External APK Link (Optional override)</label>
+                      <input 
+                        type="text" 
+                        value={externalApkUrl} 
+                        onChange={e => setExternalApkUrl(e.target.value)} 
+                        placeholder="https://mediafire.com/..." 
+                        className="w-full bg-transparent font-bold text-white outline-none text-sm border-b border-white/10 pb-2 mb-2" 
+                      />
+                      <p className="text-[10px] text-gray-400">
+                        <strong>For files {'>'}50MB:</strong> You must upload the APK manually to MediaFire or Google Drive, and paste the direct link here. This bypasses all server limits.
+                      </p>
                     </div>
                     
                     <div className="bg-dark-800 p-4 rounded-xl border border-white/5 focus-within:border-gold-500/50 transition-colors mb-4 cursor-pointer hover:bg-white/5" onClick={() => imageInputRef.current?.click()}>

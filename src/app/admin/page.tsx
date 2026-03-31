@@ -191,15 +191,7 @@ export default function AdminDashboard() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-
-      // Supabase free tier hard limit is 50MB per object
-      const MAX_SIZE = 50 * 1024 * 1024;
-      if (file.size > MAX_SIZE) {
-        alert(`❌ File too large!\n\n"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB.\n\nSupabase free tier allows max 50 MB per file.\nPlease compress the APK or use a file under 50 MB.`);
-        e.target.value = ''; // reset input
-        return;
-      }
-
+      // No size limit — files <50MB go to Supabase, larger go to GitHub Releases (up to 2GB)
       setSelectedFile(file);
       setUploadStep(2);
       
@@ -265,19 +257,26 @@ export default function AdminDashboard() {
     }
 
     try {
-      // ── Step 1: Upload APK via the server-side admin route (uses service role key → bypasses RLS) ──
-      // Simulate smooth progress while fetch uploads (fetch has no real progress API)
+      // ── Step 1: Smart upload — GitHub Releases for large APKs, Supabase for small ones ──
+      const FIFTY_MB = 50 * 1024 * 1024;
+      const isLargeFile = selectedFile.size > FIFTY_MB;
+
+      // Smooth fake progress (fetch has no real upload progress)
       let fakeProgress = 0;
       const progressTimer = setInterval(() => {
-        fakeProgress = Math.min(fakeProgress + 2, 75);
+        fakeProgress = Math.min(fakeProgress + (isLargeFile ? 1 : 3), 75);
         setUploadProgress(fakeProgress);
-      }, 300);
+      }, 400);
 
       const apkForm = new FormData();
       apkForm.append('file', selectedFile);
-      apkForm.append('bucket', 'apks');
 
-      const apkRes = await fetch('/api/admin/upload', { method: 'POST', body: apkForm });
+      // Large files → GitHub Releases (up to 2 GB, free)
+      // Small files → Supabase Storage (fast, CDN-backed)
+      const apkEndpoint = isLargeFile ? '/api/admin/upload-github' : '/api/admin/upload';
+      if (!isLargeFile) apkForm.append('bucket', 'apks');
+
+      const apkRes = await fetch(apkEndpoint, { method: 'POST', body: apkForm });
       const apkJson = await apkRes.json();
 
       if (!apkRes.ok || !apkJson.url) {
@@ -287,7 +286,7 @@ export default function AdminDashboard() {
       const downloadUrl: string = apkJson.url;
       setUploadProgress(80);
 
-      // ── Step 2: Upload icon/image if provided ──
+      // ── Step 2: Upload icon/image (always Supabase — images are small) ──
       let imageUrl: string | null = null;
       if (selectedImage) {
         const imgForm = new FormData();

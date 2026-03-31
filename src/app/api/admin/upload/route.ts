@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 });
     }
 
-    const safeName = file.name.replace(/\s+/g, '_');
+    const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const path = `${Date.now()}-${safeName}`;
 
     // 3. Upload to Supabase with service-role key (bypasses all RLS)

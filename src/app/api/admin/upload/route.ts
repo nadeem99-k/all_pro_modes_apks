@@ -1,92 +1,72 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { isAdmin } from '@/lib/admin';
 
-// Use service role key to bypass RLS for admin uploads
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-);
+// Service-role client – bypasses all RLS
+function getServiceClient() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
-export async function POST(req: Request) {
+// Allow up to 5 minutes for large APK uploads
+export const maxDuration = 300;
+
+export async function POST(req: NextRequest) {
   try {
+    // 1. Verify admin session
     const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
     );
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!isAdmin(user?.email)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const data = await req.formData();
-    const file: File | null = data.get('file') as unknown as File;
-    const image: File | null = data.get('image') as unknown as File;
-    
+    // 2. Parse multipart form
+    const form = await req.formData();
+    const file = form.get('file') as File | null;
+    const bucket = (form.get('bucket') as string | null) || 'apks';
+
     if (!file) {
-      return NextResponse.json({ success: false, error: "No file provided" });
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // 1. Upload APK to 'apks' bucket
-    const fileBytes = await file.arrayBuffer();
-    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-    
-    const { data: fileData, error: fileError } = await supabaseAdmin
-      .storage
-      .from('apks')
-      .upload(fileName, fileBytes, {
-        contentType: file.type || 'application/vnd.android.package-archive',
-        upsert: true
+    const allowed = ['apks', 'icons', 'screenshots'];
+    if (!allowed.includes(bucket)) {
+      return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 });
+    }
+
+    const safeName = file.name.replace(/\s+/g, '_');
+    const path = `${Date.now()}-${safeName}`;
+
+    // 3. Upload to Supabase with service-role key (bypasses all RLS)
+    const service = getServiceClient();
+    const fileBuffer = await file.arrayBuffer();
+
+    const { error } = await service.storage
+      .from(bucket)
+      .upload(path, fileBuffer, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: true,
       });
 
-    if (fileError) throw fileError;
-
-    // Get public URL for the APK
-    const { data: { publicUrl: downloadUrl } } = supabaseAdmin
-      .storage
-      .from('apks')
-      .getPublicUrl(fileName);
-
-    let imageUrl = null;
-    if (image) {
-      // 2. Upload Image to 'icons' bucket
-      const imageBytes = await image.arrayBuffer();
-      const imageName = `${Date.now()}-${image.name.replace(/\s+/g, '_')}`;
-      
-      const { data: imageData, error: imageError } = await supabaseAdmin
-        .storage
-        .from('icons')
-        .upload(imageName, imageBytes, {
-          contentType: image.type,
-          upsert: true
-        });
-
-      if (imageError) throw imageError;
-
-      // Get public URL for the icon
-      const { data: { publicUrl: iconUrl } } = supabaseAdmin
-        .storage
-        .from('icons')
-        .getPublicUrl(imageName);
-      
-      imageUrl = iconUrl;
+    if (error) {
+      console.error('Storage upload error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      url: downloadUrl,
-      imageUrl: imageUrl
-    });
-  } catch (error: any) {
-    console.error("Upload error:", error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message || 'Upload failed.' 
-    }, { status: 500 });
+    const { data: { publicUrl } } = service.storage.from(bucket).getPublicUrl(path);
+
+    return NextResponse.json({ url: publicUrl });
+  } catch (err: any) {
+    console.error('Upload route error:', err);
+    return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
   }
 }

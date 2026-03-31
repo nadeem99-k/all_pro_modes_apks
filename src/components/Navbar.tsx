@@ -43,8 +43,8 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="fixed top-0 w-full z-50 glass border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <nav className="fixed top-0 w-full z-50 glass border-b border-white/5" suppressHydrationWarning>
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between" suppressHydrationWarning>
           <Link href="/" className="text-2xl font-black tracking-tighter flex items-center gap-2">
             <Shield className="w-8 h-8 text-gold-500" />
             <span>VIP<span className="text-gold-500">MODS</span></span>

@@ -5,7 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { VisitorTracker } from "@/components/VisitorTracker";
 import { MaintenanceCheck } from "@/components/MaintenanceCheck";
-import { WhatsAppFloat } from "@/components/WhatsAppFloat";
+import { WhatsAppFloatClient } from "@/components/WhatsAppFloatClient";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -39,8 +39,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark scroll-smooth" data-scroll-behavior="smooth">
-      <body className={`${inter.className} min-h-screen bg-dark-900 text-white selection:bg-gold-500 selection:text-black flex flex-col`}>
+    <html lang="en" className="dark scroll-smooth" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen bg-dark-900 text-white selection:bg-gold-500 selection:text-black flex flex-col`} suppressHydrationWarning>
         <MaintenanceCheck>
           <VisitorTracker />
           <Navbar />
@@ -48,7 +48,7 @@ export default function RootLayout({
             {children}
           </main>
           <Footer />
-          <WhatsAppFloat />
+          <WhatsAppFloatClient />
         </MaintenanceCheck>
       </body>
     </html>

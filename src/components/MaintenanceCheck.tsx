@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ShieldAlert, AlertTriangle } from "lucide-react";
 import { Inter } from "next/font/google";
@@ -9,19 +9,37 @@ const inter = Inter({ subsets: ["latin"] });
 
 export function MaintenanceCheck({ children }: { children: React.ReactNode }) {
   const [maintenance, setMaintenance] = useState<any>(null);
-  const supabase = createClient();
+  // Memoize the client so only ONE instance is created per mount,
+  // preventing multiple clients from racing over the same auth lock.
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkMaintenance() {
       if (window.location.pathname.startsWith('/admin')) return;
-      
-      const { data } = await supabase.from('site_settings').select('value').eq('id', 'maintenance_mode').single();
-      if (data?.value?.enabled) {
-        setMaintenance(data.value);
+
+      try {
+        const { data } = await supabase
+          .from('site_settings')
+          .select('value')
+          .eq('id', 'maintenance_mode')
+          .single();
+
+        if (!cancelled && data?.value?.enabled) {
+          setMaintenance(data.value);
+        }
+      } catch {
+        // Network unavailable or Supabase unreachable – skip silently
       }
     }
+
     checkMaintenance();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
 
   if (maintenance) {
     return (

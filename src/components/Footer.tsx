@@ -7,17 +7,19 @@ import { createClient } from "@/lib/supabase/client";
 
 export function Footer() {
   const [session, setSession] = useState<any>(null);
+  const [year, setYear] = useState<number | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
+    setYear(new Date().getFullYear());
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
   }, [supabase.auth]);
 
   return (
-    <footer className="border-t border-white/5 bg-black/50 backdrop-blur-md pt-16 pb-8 px-6 mt-auto">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+    <footer className="border-t border-white/5 bg-black/50 backdrop-blur-md pt-16 pb-8 px-6 mt-auto" suppressHydrationWarning>
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 mb-12" suppressHydrationWarning>
         <div className="md:col-span-2">
           <Link href="/" className="text-2xl font-black tracking-tighter flex items-center gap-2 mb-6">
             <Shield className="w-8 h-8 text-gold-500" />
@@ -53,7 +55,7 @@ export function Footer() {
       </div>
 
       <div className="max-w-7xl mx-auto pt-8 border-t border-white/5 text-center text-sm text-gray-600 font-medium">
-        © {new Date().getFullYear()} VIP Mods Platform. All rights reserved. Not affiliated with Google Play or Apple App Store.
+        © {year ?? new Date().getFullYear()} VIP Mods Platform. All rights reserved. Not affiliated with Google Play or Apple App Store.
       </div>
     </footer>
   );
